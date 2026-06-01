@@ -17,8 +17,6 @@ type StreamState struct {
 	CreatedAt  int64
 	seq        int64
 
-	inReasoning  bool
-	inText       bool
 	reasoningID  string
 	messageID    string
 	reasoningIdx int
@@ -123,10 +121,10 @@ func (s *StreamState) ProcessChunk(chunk string) []string {
 func (s *StreamState) Done() []string {
 	var events []string
 
-	if s.inReasoning {
+	if s.reasoningID != "" {
 		events = append(events, s.closeReasoning()...)
 	}
-	if s.inText {
+	if s.messageID != "" {
 		events = append(events, s.closeText()...)
 	}
 	events = append(events, s.closeFuncBlocks()...)
@@ -134,19 +132,21 @@ func (s *StreamState) Done() []string {
 	// Build output array
 	var output []map[string]any
 
-	if s.reasoningID != "" || s.reasoningBuf.Len() > 0 {
+	if s.reasoningID != "" {
+		reasoningText := s.reasoningBuf.String()
 		output = append(output, map[string]any{
 			"type": "reasoning", "id": s.reasoningID, "status": "completed",
 			"summary": []map[string]any{
-				{"type": "summary_text", "text": s.reasoningBuf.String()},
+				{"type": "summary_text", "text": reasoningText},
 			},
 		})
 	}
-	if s.messageID != "" || s.contentBuf.Len() > 0 {
+	if s.messageID != "" {
+		contentText := s.contentBuf.String()
 		output = append(output, map[string]any{
 			"type": "message", "id": s.messageID, "role": "assistant", "status": "completed",
 			"content": []map[string]any{
-				{"type": "output_text", "text": s.contentBuf.String()},
+				{"type": "output_text", "text": contentText},
 			},
 		})
 	}
@@ -166,10 +166,7 @@ func (s *StreamState) Done() []string {
 		})
 	}
 
-	status := "completed"
-	if s.finishReason == "length" {
-		status = "incomplete"
-	}
+	status := finishReasonToStatus(s.finishReason)
 
 	totalTokens := s.inputTokens + s.outputTokens
 	events = append(events, s.event("response.completed", map[string]any{
@@ -199,8 +196,8 @@ func (s *StreamState) handleReasoning(text string) []string {
 	var events []string
 	s.reasoningBuf.WriteString(text)
 
-	if !s.inReasoning {
-		if s.inText {
+	if s.reasoningID == "" {
+		if s.messageID != "" {
 			events = append(events, s.closeText()...)
 		}
 		s.reasoningID = "rs_" + s.ResponseID
@@ -216,7 +213,6 @@ func (s *StreamState) handleReasoning(text string) []string {
 			"output_index": s.reasoningIdx, "content_index": 0,
 			"part": map[string]any{"type": "summary_text", "text": ""},
 		}))
-		s.inReasoning = true
 	}
 
 	events = append(events, s.event("response.reasoning_summary_text.delta", map[string]any{
@@ -230,8 +226,8 @@ func (s *StreamState) handleContent(text string) []string {
 	var events []string
 	s.contentBuf.WriteString(text)
 
-	if !s.inText {
-		if s.inReasoning {
+	if s.messageID == "" {
+		if s.reasoningID != "" {
 			events = append(events, s.closeReasoning()...)
 			s.messageIdx = 1
 		}
@@ -249,7 +245,6 @@ func (s *StreamState) handleContent(text string) []string {
 			"output_index": s.messageIdx, "content_index": 0,
 			"part": map[string]any{"type": "output_text", "text": ""},
 		}))
-		s.inText = true
 	}
 
 	events = append(events, s.event("response.output_text.delta", map[string]any{
@@ -271,8 +266,11 @@ func (s *StreamState) handleToolCall(idx int, tc gjson.Result) []string {
 	if s.funcArgs[idx] == nil {
 		s.funcArgs[idx] = &strings.Builder{}
 	}
-	if args := tc.Get("function.arguments"); args.Exists() {
-		s.funcArgs[idx].WriteString(args.String())
+
+	funcArgs := tc.Get("function.arguments")
+	if funcArgs.Exists() {
+		argsStr := funcArgs.String()
+		s.funcArgs[idx].WriteString(argsStr)
 	}
 
 	if !s.funcItemAdded[idx] && s.funcCallIDs[idx] != "" && s.funcNames[idx] != "" {
@@ -289,28 +287,28 @@ func (s *StreamState) handleToolCall(idx int, tc gjson.Result) []string {
 		s.funcItemAdded[idx] = true
 	}
 
-	if args := tc.Get("function.arguments"); args.Exists() && args.String() != "" {
+	if funcArgs.Exists() && funcArgs.String() != "" {
 		oi := s.nextFuncOutputIdx()
 		events = append(events, s.event("response.function_call_arguments.delta", map[string]any{
 			"type": "response.function_call_arguments.delta", "response_id": s.ResponseID,
-			"output_index": oi, "delta": args.String(),
+			"output_index": oi, "delta": funcArgs.String(),
 		}))
 	}
 	return events
 }
 
 func (s *StreamState) closeReasoning() []string {
-	s.inReasoning = false
+	reasoningText := s.reasoningBuf.String()
 	return []string{
 		s.event("response.reasoning_summary_text.done", map[string]any{
 			"type": "response.reasoning_summary_text.done", "response_id": s.ResponseID,
 			"output_index": s.reasoningIdx, "content_index": 0,
-			"text": s.reasoningBuf.String(),
+			"text": reasoningText,
 		}),
 		s.event("response.reasoning_summary_part.done", map[string]any{
 			"type": "response.reasoning_summary_part.done", "response_id": s.ResponseID,
 			"output_index": s.reasoningIdx, "content_index": 0,
-			"part": map[string]any{"type": "summary_text", "text": s.reasoningBuf.String()},
+			"part": map[string]any{"type": "summary_text", "text": reasoningText},
 		}),
 		s.event("response.output_item.done", map[string]any{
 			"type": "response.output_item.done", "response_id": s.ResponseID,
@@ -321,17 +319,17 @@ func (s *StreamState) closeReasoning() []string {
 }
 
 func (s *StreamState) closeText() []string {
-	s.inText = false
+	contentText := s.contentBuf.String()
 	return []string{
 		s.event("response.output_text.done", map[string]any{
 			"type": "response.output_text.done", "response_id": s.ResponseID,
 			"output_index": s.messageIdx, "content_index": 0,
-			"text": s.contentBuf.String(),
+			"text": contentText,
 		}),
 		s.event("response.content_part.done", map[string]any{
 			"type": "response.content_part.done", "response_id": s.ResponseID,
 			"output_index": s.messageIdx, "content_index": 0,
-			"part": map[string]any{"type": "output_text", "text": s.contentBuf.String()},
+			"part": map[string]any{"type": "output_text", "text": contentText},
 		}),
 		s.event("response.output_item.done", map[string]any{
 			"type": "response.output_item.done", "response_id": s.ResponseID,
@@ -374,10 +372,10 @@ func (s *StreamState) closeFuncBlocks() []string {
 
 func (s *StreamState) nextFuncOutputIdx() int {
 	n := 0
-	if s.reasoningID != "" || s.inReasoning {
+	if s.reasoningID != "" {
 		n = 1
 	}
-	if s.messageID != "" || s.inText {
+	if s.messageID != "" {
 		n++
 	}
 	n += s.funcCount
@@ -389,9 +387,8 @@ func (s *StreamState) nextSeq() int64 {
 	return atomic.AddInt64(&s.seq, 1)
 }
 
-func (s *StreamState) event(name string, payload any) string {
-	p := payload.(map[string]any)
-	p["sequence_number"] = s.nextSeq()
-	data, _ := json.Marshal(p)
+func (s *StreamState) event(name string, payload map[string]any) string {
+	payload["sequence_number"] = s.nextSeq()
+	data, _ := json.Marshal(payload)
 	return fmt.Sprintf("event: %s\ndata: %s\n\n", name, string(data))
 }

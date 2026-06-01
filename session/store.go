@@ -99,9 +99,10 @@ func (s *Store) evictExpired() {
 	now := time.Now()
 	for el := s.lru.Back(); el != nil; {
 		prev := el.Prev()
-		if now.After(el.Value.(*Entry).expiresAt) {
+		entry := el.Value.(*Entry)
+		if now.After(entry.expiresAt) {
 			s.lru.Remove(el)
-			delete(s.items, el.Value.(*Entry).ResponseID)
+			delete(s.items, entry.ResponseID)
 		}
 		el = prev
 	}
@@ -110,7 +111,8 @@ func (s *Store) evictExpired() {
 func (s *Store) evictLRU() {
 	el := s.lru.Back()
 	if el != nil {
+		entry := el.Value.(*Entry)
 		s.lru.Remove(el)
-		delete(s.items, el.Value.(*Entry).ResponseID)
+		delete(s.items, entry.ResponseID)
 	}
 }

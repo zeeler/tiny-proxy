@@ -30,8 +30,9 @@ func ConvertRequest(body string) string {
 
 	// stream + stream_options
 	if v := gjson.Get(body, "stream"); v.Exists() {
-		out, _ = sjson.Set(out, "stream", v.Bool())
-		if v.Bool() {
+		streamVal := v.Bool()
+		out, _ = sjson.Set(out, "stream", streamVal)
+		if streamVal {
 			out, _ = sjson.Set(out, "stream_options.include_usage", true)
 		}
 	}

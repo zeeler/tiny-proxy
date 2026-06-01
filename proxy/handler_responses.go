@@ -116,12 +116,13 @@ func (h *ResponsesHandler) handleNonStream(w http.ResponseWriter, chatBody, mode
 	}
 
 	// Convert Chat → Responses response
-	responsesBody := convert.ConvertResponse(string(respBody), model)
+	respStr := string(respBody)
+	responsesBody := convert.ConvertResponse(respStr, model)
 
 	// Store request messages + reasoning for previous_response_id continuity
 	respID := gjson.Get(responsesBody, "id").String()
 	messages := gjson.Get(chatBody, "messages").Raw
-	reasoning := convert.ExtractReasoning(string(respBody))
+	reasoning := convert.ExtractReasoning(respStr)
 	h.Store.Put(respID, messages, reasoning)
 
 	w.Header().Set("Content-Type", "application/json")

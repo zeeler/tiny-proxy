@@ -22,9 +22,13 @@ type Config struct {
 
 // LoadEnv loads configuration from environment variables with defaults.
 func LoadEnv() *Config {
+	authKey := os.Getenv("PROXY_AUTH_KEY")
+	if authKey == "" {
+		authKey = generateAuthKey()
+	}
 	return &Config{
 		ProxyPort:       getEnv("PROXY_PORT", "3688"),
-		ProxyAuthKey:    getEnv("PROXY_AUTH_KEY", generateAuthKey()),
+		ProxyAuthKey:    authKey,
 		DeepSeekAPIKey:  os.Getenv("DEEPSEEK_API_KEY"),
 		DeepSeekBaseURL: getEnv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
 		DeepSeekModel:   getEnv("DEEPSEEK_MODEL", "deepseek-v4-flash"),

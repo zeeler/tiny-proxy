@@ -3,7 +3,7 @@ package convert
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
+	"strconv"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -47,15 +47,15 @@ func ConvertResponse(chatBody, model string) string {
 	// Message output
 	content := message.Get("content")
 	toolCalls := message.Get("tool_calls")
-	hasContent := content.Exists() && content.String() != ""
+	hasTextContent := content.Exists() && content.String() != ""
 	hasToolCalls := toolCalls.Exists() && len(toolCalls.Array()) > 0
 
-	if hasContent || (!hasToolCalls && content.Exists()) {
+	if content.Exists() && (content.String() != "" || !hasToolCalls) {
 		msg := map[string]any{
 			"type": "message",
 			"role": "assistant",
 		}
-		if hasContent {
+		if hasTextContent {
 			msg["content"] = []map[string]any{
 				{"type": "output_text", "text": content.String()},
 			}
@@ -86,10 +86,7 @@ func ConvertResponse(chatBody, model string) string {
 	}
 
 	// Status
-	status := "completed"
-	if finishReason == "length" {
-		status = "incomplete"
-	}
+	status := finishReasonToStatus(finishReason)
 	out, _ = sjson.Set(out, "status", status)
 
 	// Usage
@@ -121,7 +118,15 @@ func GenerateResponseID() string {
 	return "resp_" + hex.EncodeToString(b)
 }
 
-// itoa converts int to string.
+// finishReasonToStatus maps a Chat Completions finish_reason to a Responses API status.
+func finishReasonToStatus(reason string) string {
+	if reason == "length" {
+		return "incomplete"
+	}
+	return "completed"
+}
+
+// itoa converts int to string using the standard library.
 func itoa(n int) string {
-	return fmt.Sprintf("%d", n)
+	return strconv.Itoa(n)
 }

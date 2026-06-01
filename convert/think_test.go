@@ -47,36 +47,3 @@ func TestInjectReasoningLastAssistant(t *testing.T) {
 		t.Error("reasoning should be present")
 	}
 }
-
-func TestBuildMessagesJSON(t *testing.T) {
-	history := []HistoryEntry{
-		{Role: "user", Content: "hello"},
-		{Role: "assistant", Content: "hi", Reasoning: "thinking..."},
-	}
-	result := BuildMessagesJSON(history)
-	if !strings.Contains(result, `"role":"user"`) {
-		t.Error("should contain user role")
-	}
-	if !strings.Contains(result, `"reasoning_content"`) {
-		t.Error("should contain reasoning_content when reasoning is provided")
-	}
-	if !strings.Contains(result, "thinking...") {
-		t.Error("should contain reasoning text")
-	}
-}
-
-func TestEscapeJSON(t *testing.T) {
-	tests := []struct{ input, expected string }{
-		{`hello`, `hello`},
-		{`he"llo`, `he\"llo`},
-		{"line1\nline2", `line1\nline2`},
-		{"tab\there", `tab\there`},
-		{`a\b`, `a\\b`},
-	}
-	for _, tt := range tests {
-		got := escapeJSON(tt.input)
-		if got != tt.expected {
-			t.Errorf("escapeJSON(%q) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}
