@@ -1,0 +1,4 @@
+tiny-proxy
+.env
+*.bak
+.DS_Store
