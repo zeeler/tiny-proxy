@@ -17,12 +17,12 @@ type StreamState struct {
 	CreatedAt  int64
 	seq        int64
 
-	inReasoning bool
-	inText      bool
-	reasoningID string
-	messageID   string
+	inReasoning  bool
+	inText       bool
+	reasoningID  string
+	messageID    string
 	reasoningIdx int
-	messageIdx  int
+	messageIdx   int
 
 	funcCallIDs   map[int]string
 	funcNames     map[int]string
@@ -34,6 +34,9 @@ type StreamState struct {
 
 	inputTokens  int64
 	outputTokens int64
+
+	finishReason string // captured from last chunk's finish_reason
+	funcCount    int    // number of function calls for unique output_index
 }
 
 // NewStreamState creates a new streaming state machine.
@@ -84,6 +87,11 @@ func (s *StreamState) ProcessChunk(chunk string) []string {
 
 	for _, choice := range choices.Array() {
 		delta := choice.Get("delta")
+
+		// Capture finish_reason for the completed event
+		if fr := choice.Get("finish_reason"); fr.Exists() && fr.String() != "" {
+			s.finishReason = fr.String()
+		}
 
 		// reasoning_content
 		if rc := delta.Get("reasoning_content"); rc.Exists() && rc.String() != "" {
@@ -158,13 +166,18 @@ func (s *StreamState) Done() []string {
 		})
 	}
 
+	status := "completed"
+	if s.finishReason == "length" {
+		status = "incomplete"
+	}
+
 	totalTokens := s.inputTokens + s.outputTokens
 	events = append(events, s.event("response.completed", map[string]any{
 		"type": "response.completed", "response_id": s.ResponseID,
 		"response": map[string]any{
 			"id": s.ResponseID, "object": "response",
 			"created_at": s.CreatedAt, "model": s.Model,
-			"status": "completed", "output": output,
+			"status": status, "output": output,
 			"usage": map[string]any{
 				"input_tokens": s.inputTokens, "output_tokens": s.outputTokens,
 				"total_tokens": totalTokens,
@@ -302,7 +315,7 @@ func (s *StreamState) closeReasoning() []string {
 		s.event("response.output_item.done", map[string]any{
 			"type": "response.output_item.done", "response_id": s.ResponseID,
 			"output_index": s.reasoningIdx,
-			"item": map[string]any{"type": "reasoning", "id": s.reasoningID, "status": "completed"},
+			"item":         map[string]any{"type": "reasoning", "id": s.reasoningID, "status": "completed"},
 		}),
 	}
 }
@@ -323,7 +336,7 @@ func (s *StreamState) closeText() []string {
 		s.event("response.output_item.done", map[string]any{
 			"type": "response.output_item.done", "response_id": s.ResponseID,
 			"output_index": s.messageIdx,
-			"item": map[string]any{"type": "message", "id": s.messageID, "role": "assistant", "status": "completed"},
+			"item":         map[string]any{"type": "message", "id": s.messageID, "role": "assistant", "status": "completed"},
 		}),
 	}
 }
@@ -367,6 +380,8 @@ func (s *StreamState) nextFuncOutputIdx() int {
 	if s.messageID != "" || s.inText {
 		n++
 	}
+	n += s.funcCount
+	s.funcCount++
 	return n
 }
 

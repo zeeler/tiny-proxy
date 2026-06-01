@@ -3,13 +3,13 @@ package proxy
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 
 	"github.com/terry/tiny-proxy/convert"
 	"github.com/terry/tiny-proxy/session"
@@ -39,22 +39,65 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	stream := gjson.Get(bodyStr, "stream").Bool()
 
-	// Handle previous_response_id for session continuity
+	// Convert Responses → Chat Completions request first
+	chatBody := convert.ConvertRequest(bodyStr)
+
+	// Handle previous_response_id — merge stored history into chat body at Chat format level
 	prevID := gjson.Get(bodyStr, "previous_response_id").String()
 	if prevID != "" {
 		if entry, ok := h.Store.Get(prevID); ok {
-			bodyStr = injectHistory(bodyStr, entry)
+			chatBody = injectHistory(chatBody, entry)
 		}
 	}
-
-	// Convert Responses → Chat Completions request
-	chatBody := convert.ConvertRequest(bodyStr)
 
 	if !stream {
 		h.handleNonStream(w, chatBody, model)
 	} else {
-		h.handleStream(w, r, chatBody, model, bodyStr)
+		h.handleStream(w, r, chatBody, model)
 	}
+}
+
+// injectHistory merges stored chat messages + current messages and injects cached reasoning.
+func injectHistory(chatBody string, entry *session.Entry) string {
+	if entry.Messages == "" {
+		return chatBody
+	}
+
+	// Parse stored messages from previous request
+	var storedMsgs []any
+	if err := json.Unmarshal([]byte(entry.Messages), &storedMsgs); err != nil {
+		log.Printf("[WARN] injectHistory: cannot unmarshal stored messages: %v", err)
+		return chatBody
+	}
+
+	// Parse current messages from the converted request
+	currentRaw := gjson.Get(chatBody, "messages").Raw
+	var currentMsgs []any
+	if err := json.Unmarshal([]byte(currentRaw), &currentMsgs); err != nil {
+		log.Printf("[WARN] injectHistory: cannot unmarshal current messages: %v", err)
+		return chatBody
+	}
+
+	// Merge: stored conversation + new messages
+	allMsgs := append(storedMsgs, currentMsgs...)
+	allMsgsJSON, err := json.Marshal(allMsgs)
+	if err != nil {
+		log.Printf("[WARN] injectHistory: cannot marshal merged messages: %v", err)
+		return chatBody
+	}
+
+	result, err := sjson.SetRaw(chatBody, "messages", string(allMsgsJSON))
+	if err != nil {
+		log.Printf("[WARN] injectHistory: sjson.SetRaw failed: %v", err)
+		return chatBody
+	}
+
+	// Inject cached reasoning into the last assistant message
+	if entry.Reasoning != "" {
+		result = convert.InjectReasoning(result, entry.Reasoning)
+	}
+
+	return result
 }
 
 func (h *ResponsesHandler) handleNonStream(w http.ResponseWriter, chatBody, model string) {
@@ -75,17 +118,18 @@ func (h *ResponsesHandler) handleNonStream(w http.ResponseWriter, chatBody, mode
 	// Convert Chat → Responses response
 	responsesBody := convert.ConvertResponse(string(respBody), model)
 
-	// Store for previous_response_id continuity
+	// Store request messages + reasoning for previous_response_id continuity
 	respID := gjson.Get(responsesBody, "id").String()
+	messages := gjson.Get(chatBody, "messages").Raw
 	reasoning := convert.ExtractReasoning(string(respBody))
-	h.Store.Put(respID, string(respBody), reasoning)
+	h.Store.Put(respID, messages, reasoning)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(responsesBody))
 }
 
-func (h *ResponsesHandler) handleStream(w http.ResponseWriter, r *http.Request, chatBody, model, originalReq string) {
+func (h *ResponsesHandler) handleStream(w http.ResponseWriter, r *http.Request, chatBody, model string) {
 	resp, err := h.Upstream.Send([]byte(chatBody))
 	if err != nil {
 		log.Printf("[ERROR] upstream stream: %v", err)
@@ -136,18 +180,10 @@ func (h *ResponsesHandler) handleStream(w http.ResponseWriter, r *http.Request, 
 		flusher.Flush()
 	}
 
-	// Store reasoning for multi-turn continuity
+	// Store request messages + reasoning for multi-turn continuity
 	reasoning := state.GetReasoningText()
 	messages := gjson.Get(chatBody, "messages").Raw
 	h.Store.Put(respID, messages, reasoning)
-}
-
-// injectHistory injects cached reasoning into the conversation for multi-turn continuity.
-func injectHistory(body string, entry *session.Entry) string {
-	if entry.Reasoning != "" {
-		body = convert.InjectReasoning(body, entry.Reasoning)
-	}
-	return body
 }
 
 func writeError(w http.ResponseWriter, code int, msg string) {
@@ -161,6 +197,3 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 		},
 	})
 }
-
-// Ensure fmt is used.
-var _ = fmt.Sprintf

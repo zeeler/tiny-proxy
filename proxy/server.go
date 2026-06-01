@@ -85,7 +85,11 @@ func (s *Server) Start() error {
 	log.Printf("[INFO] tiny-proxy starting on %s", addr)
 	log.Printf("[INFO] upstream: %s", s.cfg.DeepSeekBaseURL)
 	log.Printf("[INFO] model: %s", s.cfg.DeepSeekModel)
-	log.Printf("[INFO] auth key: %s...", s.cfg.ProxyAuthKey[:min(8, len(s.cfg.ProxyAuthKey))])
+	if s.cfg.ProxyAuthKey != "" {
+		log.Printf("[INFO] auth: configured")
+	} else {
+		log.Printf("[WARN] auth: not configured")
+	}
 
 	return http.ListenAndServe(addr, s.handler)
 }

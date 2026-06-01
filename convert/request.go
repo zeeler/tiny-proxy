@@ -1,7 +1,6 @@
 package convert
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -154,6 +153,3 @@ func convertFuncCallOutputItem(item gjson.Result, out string) string {
 	})
 	return out
 }
-
-// Ensure fmt is used.
-var _ = fmt.Sprintf

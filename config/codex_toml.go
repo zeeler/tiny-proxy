@@ -32,7 +32,11 @@ func BackupConfig(path string) error {
 func SetupCodexConfig(path, port, authKey string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("read config: %w", err)
+		if os.IsNotExist(err) {
+			data = []byte{}
+		} else {
+			return fmt.Errorf("read config: %w", err)
+		}
 	}
 
 	result := string(data)
@@ -77,6 +81,9 @@ func RestoreConfig(path string) error {
 func DryRunSetupCodex(path, port, authKey string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
 		return "", fmt.Errorf("read config: %w", err)
 	}
 

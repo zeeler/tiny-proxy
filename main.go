@@ -46,14 +46,15 @@ func main() {
 	// Default mode: setup config + start proxy
 	configPath := config.DefaultCodexConfigPath()
 	if configPath != "" {
+		// Backup existing config (ok if it doesn't exist yet)
 		if err := config.BackupConfig(configPath); err != nil {
 			log.Printf("[WARN] cannot backup config: %v", err)
+		}
+		// Setup runs independently — config/codex_toml.go handles missing files
+		if err := config.SetupCodexConfig(configPath, cfg.ProxyPort, cfg.ProxyAuthKey); err != nil {
+			log.Printf("[WARN] cannot setup config: %v", err)
 		} else {
-			if err := config.SetupCodexConfig(configPath, cfg.ProxyPort, cfg.ProxyAuthKey); err != nil {
-				log.Printf("[WARN] cannot setup config: %v", err)
-			} else {
-				log.Printf("[INFO] Codex config updated: %s", configPath)
-			}
+			log.Printf("[INFO] Codex config updated: %s", configPath)
 		}
 
 		authPath := config.DefaultCodexAuthPath()
@@ -64,7 +65,11 @@ func main() {
 
 	// Start proxy server
 	srv := proxy.NewServer(cfg)
-	log.Printf("[INFO] Auth key (for Codex auth.json): %s", cfg.ProxyAuthKey)
+	if cfg.ProxyAuthKey != "" {
+		log.Printf("[INFO] Auth key configured (for Codex auth.json)")
+	} else {
+		log.Printf("[WARN] No auth key set — proxy endpoints are unauthenticated")
+	}
 	log.Fatal(srv.Start())
 }
 

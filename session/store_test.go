@@ -47,7 +47,7 @@ func TestStoreLRUEviction(t *testing.T) {
 	s.Put("a", "[]", "")
 	s.Put("b", "[]", "")
 	s.Put("c", "[]", "")
-	s.Get("a") // make 'a' recently used
+	s.Get("a")           // make 'a' recently used
 	s.Put("d", "[]", "") // should evict 'b' (LRU)
 
 	if _, ok := s.Get("a"); !ok {

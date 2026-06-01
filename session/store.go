@@ -24,10 +24,6 @@ type Store struct {
 	lru      *list.List
 }
 
-type listItem struct {
-	key string
-}
-
 // New creates a new Store with the given capacity and TTL.
 func New(capacity int, ttl time.Duration) *Store {
 	return &Store{
