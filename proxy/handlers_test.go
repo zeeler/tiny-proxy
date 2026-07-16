@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/terry/tiny-proxy/session"
+	"github.com/zeeler/codex-miniproxy/session"
 )
 
 func TestHandleHealth(t *testing.T) {
@@ -59,33 +59,6 @@ func TestWriteError(t *testing.T) {
 	}
 	if err["code"] != float64(http.StatusBadRequest) {
 		t.Errorf("code = %v", err["code"])
-	}
-}
-
-func TestCheckAuth(t *testing.T) {
-	tests := []struct {
-		name   string
-		header string
-		key    string
-		allow  bool
-	}{
-		{"empty key skips auth", "", "", true},
-		{"missing header", "", "sk-key", false},
-		{"wrong bearer key", "Bearer wrong", "sk-key", false},
-		{"correct bearer key", "Bearer sk-key", "sk-key", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			r := httptest.NewRequest("GET", "/", nil)
-			if tt.header != "" {
-				r.Header.Set("Authorization", tt.header)
-			}
-			got := checkAuth(w, r, tt.key)
-			if got != tt.allow {
-				t.Errorf("checkAuth = %v, want %v", got, tt.allow)
-			}
-		})
 	}
 }
 

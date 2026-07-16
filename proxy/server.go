@@ -4,12 +4,11 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/terry/tiny-proxy/config"
-	"github.com/terry/tiny-proxy/session"
-	"github.com/terry/tiny-proxy/upstream"
+	"github.com/zeeler/codex-miniproxy/config"
+	"github.com/zeeler/codex-miniproxy/session"
+	"github.com/zeeler/codex-miniproxy/upstream"
 )
 
 // Server is the HTTP proxy server.
@@ -32,21 +31,12 @@ func NewServer(cfg *config.Config) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
-		if !checkAuth(w, r, cfg.ProxyAuthKey) {
-			return
-		}
 		handleModels(w, r, cfg.DeepSeekModel)
 	})
 	mux.HandleFunc("/v1/responses", func(w http.ResponseWriter, r *http.Request) {
-		if !checkAuth(w, r, cfg.ProxyAuthKey) {
-			return
-		}
 		respHandler.ServeHTTP(w, r)
 	})
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-		if !checkAuth(w, r, cfg.ProxyAuthKey) {
-			return
-		}
 		handleChatPassthrough(w, r, client)
 	})
 
@@ -85,28 +75,5 @@ func (s *Server) Start() error {
 	log.Printf("[INFO] tiny-proxy starting on %s", addr)
 	log.Printf("[INFO] upstream: %s", s.cfg.DeepSeekBaseURL)
 	log.Printf("[INFO] model: %s", s.cfg.DeepSeekModel)
-	if s.cfg.ProxyAuthKey != "" {
-		log.Printf("[INFO] auth: configured")
-	} else {
-		log.Printf("[WARN] auth: not configured")
-	}
-
 	return http.ListenAndServe(addr, s.handler)
-}
-
-func checkAuth(w http.ResponseWriter, r *http.Request, expectedKey string) bool {
-	if expectedKey == "" {
-		return true
-	}
-	auth := r.Header.Get("Authorization")
-	if auth == "" {
-		writeError(w, http.StatusUnauthorized, "missing Authorization header")
-		return false
-	}
-	key := strings.TrimPrefix(auth, "Bearer ")
-	if key != expectedKey {
-		writeError(w, http.StatusUnauthorized, "invalid API key")
-		return false
-	}
-	return true
 }

@@ -85,6 +85,18 @@ func TestConvertRequestToolChoiceOnlyWithTools(t *testing.T) {
 	}
 }
 
+func TestConvertRequestDeveloperRole(t *testing.T) {
+	req := `{"model":"x","input":[{"type":"message","role":"developer","content":"You are a helpful assistant."},{"type":"message","role":"user","content":"hi"}]}`
+	got := ConvertRequest(req)
+	// developer role should be mapped to system for Chat Completions compatibility
+	if !strings.Contains(got, `"role":"system"`) {
+		t.Error("developer role should be mapped to system")
+	}
+	if strings.Contains(got, `"role":"developer"`) {
+		t.Error("developer role should NOT appear in output")
+	}
+}
+
 func TestConvertRequestFunctionCallInput(t *testing.T) {
 	req := `{"model":"x","input":[{"type":"message","role":"user","content":"run ls"},{"type":"function_call","call_id":"call_1","name":"bash","arguments":"{\"cmd\":\"ls\"}"},{"type":"function_call_output","call_id":"call_1","output":"file list here"}]}`
 	got := ConvertRequest(req)
@@ -93,5 +105,57 @@ func TestConvertRequestFunctionCallInput(t *testing.T) {
 	}
 	if !strings.Contains(got, `"role":"tool"`) {
 		t.Error("function_call_output should produce tool role message")
+	}
+}
+
+func TestConvertRequestToolsFormatConversion(t *testing.T) {
+	// Responses API format: flat fields
+	req := `{"model":"x","input":"hi","tools":[{"type":"function","name":"get_weather","description":"Get weather","parameters":{"type":"object","properties":{"city":{"type":"string"}}}}]}`
+	got := ConvertRequest(req)
+	// Should have function wrapper
+	if !strings.Contains(got, `"function"`) {
+		t.Error("tools should be converted to Chat format with function wrapper")
+	}
+	// Should NOT lose the name
+	if !strings.Contains(got, `"name":"get_weather"`) {
+		t.Error("tool name should be preserved")
+	}
+	// Make sure it's valid JSON
+	var m map[string]any
+	if err := json.Unmarshal([]byte(got), &m); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+	tools := m["tools"].([]any)
+	tool := tools[0].(map[string]any)
+	if tool["name"] != nil {
+		t.Error("Responses format: name should be nested under function, not at tool top level")
+	}
+	fn, ok := tool["function"].(map[string]any)
+	if !ok {
+		t.Fatal("tool should have function wrapper")
+	}
+	if fn["name"] != "get_weather" {
+		t.Errorf("function.name = %q", fn["name"])
+	}
+}
+
+func TestConvertRequestToolsSkipCustomType(t *testing.T) {
+	// Custom type tools (web_search etc.) should be filtered out — Chat API doesn't support them
+	req := `{"model":"x","input":"hi","tools":[{"type":"function","name":"get_weather","parameters":{"type":"object"}},{"type":"custom","name":"web_search"}]}`
+	got := ConvertRequest(req)
+	if strings.Contains(got, `"custom"`) {
+		t.Error("custom type tools should be filtered out")
+	}
+	if !strings.Contains(got, `"get_weather"`) {
+		t.Error("function type tools should be preserved")
+	}
+}
+
+func TestConvertRequestToolsAlreadyChatFormat(t *testing.T) {
+	// Already in Chat format with function wrapper – should pass through
+	req := `{"model":"x","input":"hi","tools":[{"type":"function","function":{"name":"get_weather","parameters":{"type":"object"}}}]}`
+	got := ConvertRequest(req)
+	if !strings.Contains(got, `"function"`) {
+		t.Error("chat-format tools should passthrough unchanged")
 	}
 }

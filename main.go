@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/terry/tiny-proxy/config"
-	"github.com/terry/tiny-proxy/proxy"
+	"github.com/zeeler/codex-miniproxy/config"
+	"github.com/zeeler/codex-miniproxy/proxy"
 )
 
 var (
@@ -51,25 +51,21 @@ func main() {
 			log.Printf("[WARN] cannot backup config: %v", err)
 		}
 		// Setup runs independently — config/codex_toml.go handles missing files
-		if err := config.SetupCodexConfig(configPath, cfg.ProxyPort, cfg.ProxyAuthKey); err != nil {
+		placeholderKey := "not-required"
+		if err := config.SetupCodexConfig(configPath, cfg.ProxyPort, placeholderKey); err != nil {
 			log.Printf("[WARN] cannot setup config: %v", err)
 		} else {
 			log.Printf("[INFO] Codex config updated: %s", configPath)
 		}
 
 		authPath := config.DefaultCodexAuthPath()
-		if err := config.UpdateAuthJSON(authPath, cfg.ProxyAuthKey); err != nil {
+		if err := config.UpdateAuthJSON(authPath, placeholderKey); err != nil {
 			log.Printf("[WARN] cannot update auth.json: %v", err)
 		}
 	}
 
 	// Start proxy server
 	srv := proxy.NewServer(cfg)
-	if cfg.ProxyAuthKey != "" {
-		log.Printf("[INFO] Auth key configured (for Codex auth.json)")
-	} else {
-		log.Printf("[WARN] No auth key set — proxy endpoints are unauthenticated")
-	}
 	log.Fatal(srv.Start())
 }
 
@@ -80,7 +76,7 @@ func setupConfig(cfg *config.Config, dryRun bool) {
 	}
 
 	if dryRun {
-		result, err := config.DryRunSetupCodex(configPath, cfg.ProxyPort, cfg.ProxyAuthKey)
+		result, err := config.DryRunSetupCodex(configPath, cfg.ProxyPort, "not-required")
 		if err != nil {
 			log.Fatalf("[FATAL] dry-run failed: %v", err)
 		}
@@ -91,9 +87,9 @@ func setupConfig(cfg *config.Config, dryRun bool) {
 	}
 
 	if err := config.BackupConfig(configPath); err != nil {
-		log.Fatalf("[FATAL] backup failed: %v", err)
+		log.Printf("[WARN] cannot backup config (will proceed without backup): %v", err)
 	}
-	if err := config.SetupCodexConfig(configPath, cfg.ProxyPort, cfg.ProxyAuthKey); err != nil {
+	if err := config.SetupCodexConfig(configPath, cfg.ProxyPort, "not-required"); err != nil {
 		log.Fatalf("[FATAL] setup failed: %v", err)
 	}
 	fmt.Printf("Codex config updated: %s\n", configPath)

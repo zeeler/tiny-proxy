@@ -1,6 +1,7 @@
 package convert
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -69,9 +70,11 @@ func ConvertRequest(body string) string {
 		}
 	}
 
-	// tools passthrough (only when present and non-empty)
+	// tools: Responses API format → Chat Completions format
+	// Responses: {type, name, description, parameters} (flat)
+	// Chat:      {type, function: {name, description, parameters}} (wrapped)
 	if tools := gjson.Get(body, "tools"); tools.Exists() && tools.IsArray() && len(tools.Array()) > 0 {
-		out, _ = sjson.SetRaw(out, "tools", tools.Raw)
+		out = convertTools(tools, out)
 		if v := gjson.Get(body, "tool_choice"); v.Exists() {
 			out, _ = sjson.Set(out, "tool_choice", v.Value())
 		}
@@ -80,6 +83,44 @@ func ConvertRequest(body string) string {
 		}
 	}
 
+	return out
+}
+
+// convertTools converts tools from Responses API format (flat fields) to
+// Chat Completions format (with function wrapper). Non-function tools
+// (e.g. type "custom" for web_search) are dropped — Chat Completions
+// only supports type "function".
+func convertTools(tools gjson.Result, out string) string {
+	var converted []map[string]any
+	for _, t := range tools.Array() {
+		// Already in Chat format — passthrough
+		if t.Get("function").Exists() {
+			out, _ = sjson.SetRaw(out, "tools", tools.Raw)
+			return out
+		}
+		// Skip non-function tools (e.g. type "custom")
+		if t.Get("type").String() != "function" {
+			continue
+		}
+		// Responses format: wrap name/description/parameters into function
+		conv := map[string]any{"type": "function"}
+		fn := map[string]any{}
+		if v := t.Get("name"); v.Exists() {
+			fn["name"] = v.String()
+		}
+		if v := t.Get("description"); v.Exists() {
+			fn["description"] = v.String()
+		}
+		if v := t.Get("parameters"); v.Exists() {
+			fn["parameters"] = v.Value()
+		}
+		if len(fn) > 0 {
+			conv["function"] = fn
+		}
+		converted = append(converted, conv)
+	}
+	b, _ := json.Marshal(converted)
+	out, _ = sjson.SetRaw(out, "tools", string(b))
 	return out
 }
 
@@ -106,6 +147,11 @@ func convertMsgItem(item gjson.Result, out string) string {
 	role := item.Get("role").String()
 	if role == "" {
 		role = "user"
+	}
+	// OpenAI Responses API uses "developer" as a system-message variant
+	// (alongside "system"), but DeepSeek only recognizes "system".
+	if role == "developer" {
+		role = "system"
 	}
 	content := item.Get("content")
 	if content.Type == gjson.String {

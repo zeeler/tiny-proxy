@@ -39,11 +39,9 @@ func TestLoadEnvDefaults(t *testing.T) {
 func TestLoadEnvCustom(t *testing.T) {
 	os.Setenv("PROXY_PORT", "4000")
 	os.Setenv("DEEPSEEK_API_KEY", "sk-test")
-	os.Setenv("PROXY_AUTH_KEY", "sk-auth")
 	defer func() {
 		os.Unsetenv("PROXY_PORT")
 		os.Unsetenv("DEEPSEEK_API_KEY")
-		os.Unsetenv("PROXY_AUTH_KEY")
 	}()
 
 	cfg := LoadEnv()
@@ -52,19 +50,5 @@ func TestLoadEnvCustom(t *testing.T) {
 	}
 	if cfg.DeepSeekAPIKey != "sk-test" {
 		t.Errorf("DeepSeekAPIKey = %q", cfg.DeepSeekAPIKey)
-	}
-	if cfg.ProxyAuthKey != "sk-auth" {
-		t.Errorf("ProxyAuthKey = %q", cfg.ProxyAuthKey)
-	}
-}
-
-func TestAutoGenAuthKey(t *testing.T) {
-	os.Unsetenv("PROXY_AUTH_KEY")
-	cfg := LoadEnv()
-	if cfg.ProxyAuthKey == "" {
-		t.Error("ProxyAuthKey should be auto-generated")
-	}
-	if len(cfg.ProxyAuthKey) < 20 {
-		t.Error("ProxyAuthKey should be at least 20 chars")
 	}
 }

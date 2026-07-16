@@ -3,6 +3,8 @@ package convert
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -150,18 +152,11 @@ func (s *StreamState) Done() []string {
 			},
 		})
 	}
-	for i := 0; ; i++ {
-		name, ok := s.funcNames[i]
-		if !ok {
-			break
-		}
-		args := "{}"
-		if buf, ok := s.funcArgs[i]; ok && buf.String() != "" {
-			args = buf.String()
-		}
+	for _, i := range sortedKeys(s.funcNames) {
+		args := s.getArgs(i)
 		output = append(output, map[string]any{
 			"type": "function_call", "id": s.funcCallIDs[i],
-			"call_id": s.funcCallIDs[i], "name": name,
+			"call_id": s.funcCallIDs[i], "name": s.funcNames[i],
 			"arguments": args, "status": "completed",
 		})
 	}
@@ -188,6 +183,47 @@ func (s *StreamState) Done() []string {
 // GetReasoningText returns accumulated reasoning text for caching.
 func (s *StreamState) GetReasoningText() string {
 	return s.reasoningBuf.String()
+}
+
+// GetAssistantMessage returns the accumulated assistant message as a map
+// in Chat Completions format (role + content + reasoning_content + tool_calls),
+// for storage alongside request messages. reasoning_content is required by
+// DeepSeek's thinking mode — it must be present in every assistant message
+// that originally had reasoning, or the next multi-turn request will fail.
+func (s *StreamState) GetAssistantMessage() map[string]any {
+	if s.contentBuf.Len() == 0 && len(s.funcCallIDs) == 0 && s.reasoningBuf.Len() == 0 {
+		return nil
+	}
+	msg := map[string]any{"role": "assistant"}
+
+	if s.reasoningBuf.Len() > 0 {
+		msg["reasoning_content"] = s.reasoningBuf.String()
+	}
+
+	if s.contentBuf.Len() > 0 {
+		msg["content"] = s.contentBuf.String()
+	}
+
+	// Collect tool call indices and sort them, so we don't rely on
+	// contiguous indexing (upstream may skip indices in edge cases).
+	tcIndices := sortedKeys(s.funcCallIDs)
+	var toolCalls []map[string]any
+	for _, i := range tcIndices {
+		args := s.getArgs(i)
+		toolCalls = append(toolCalls, map[string]any{
+			"id":   s.funcCallIDs[i],
+			"type": "function",
+			"function": map[string]any{
+				"name":      s.funcNames[i],
+				"arguments": args,
+			},
+		})
+	}
+	if len(toolCalls) > 0 {
+		msg["tool_calls"] = toolCalls
+	}
+
+	return msg
 }
 
 // --- internals ---
@@ -341,15 +377,8 @@ func (s *StreamState) closeText() []string {
 
 func (s *StreamState) closeFuncBlocks() []string {
 	var events []string
-	for i := 0; ; i++ {
-		name, ok := s.funcNames[i]
-		if !ok {
-			break
-		}
-		args := "{}"
-		if buf, ok := s.funcArgs[i]; ok && buf.String() != "" {
-			args = buf.String()
-		}
+	for _, i := range sortedKeys(s.funcNames) {
+		args := s.getArgs(i)
 		oi := s.nextFuncOutputIdx()
 		events = append(events,
 			s.event("response.function_call_arguments.done", map[string]any{
@@ -361,7 +390,7 @@ func (s *StreamState) closeFuncBlocks() []string {
 				"output_index": oi,
 				"item": map[string]any{
 					"type": "function_call", "id": s.funcCallIDs[i],
-					"call_id": s.funcCallIDs[i], "name": name,
+					"call_id": s.funcCallIDs[i], "name": s.funcNames[i],
 					"arguments": args, "status": "completed",
 				},
 			}),
@@ -387,8 +416,27 @@ func (s *StreamState) nextSeq() int64 {
 	return atomic.AddInt64(&s.seq, 1)
 }
 
+// sortedKeys returns the keys of m in sorted order.
+func sortedKeys(m map[int]string) []int {
+	return slices.Sorted(maps.Keys(m))
+}
+
+// getArgs returns the accumulated function arguments for tool call i,
+// defaulting to "{}" if no arguments were streamed.
+func (s *StreamState) getArgs(i int) string {
+	if buf, ok := s.funcArgs[i]; ok && buf.String() != "" {
+		return buf.String()
+	}
+	return "{}"
+}
+
 func (s *StreamState) event(name string, payload map[string]any) string {
 	payload["sequence_number"] = s.nextSeq()
-	data, _ := json.Marshal(payload)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		// Marshal should never fail for these concrete payloads;
+		// if it does, returning empty avoids corrupting the SSE stream.
+		return ""
+	}
 	return fmt.Sprintf("event: %s\ndata: %s\n\n", name, string(data))
 }

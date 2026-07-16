@@ -11,9 +11,9 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
-	"github.com/terry/tiny-proxy/convert"
-	"github.com/terry/tiny-proxy/session"
-	"github.com/terry/tiny-proxy/upstream"
+	"github.com/zeeler/codex-miniproxy/convert"
+	"github.com/zeeler/codex-miniproxy/session"
+	"github.com/zeeler/codex-miniproxy/upstream"
 )
 
 // ResponsesHandler handles POST /v1/responses — the main proxy endpoint.
@@ -42,19 +42,49 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Convert Responses → Chat Completions request first
 	chatBody := convert.ConvertRequest(bodyStr)
 
-	// Handle previous_response_id — merge stored history into chat body at Chat format level
+	// Handle previous_response_id — merge stored history into chat body at Chat format level.
+	// Skip merge when the input already contains function_call items, which means the
+	// full conversation (including tool round-trips) is already in the input array.
+	// Injecting stored history on top of that would duplicate assistant/tool_calls messages.
 	prevID := gjson.Get(bodyStr, "previous_response_id").String()
-	if prevID != "" {
+	if prevID != "" && !inputHasFuncCalls(bodyStr) {
 		if entry, ok := h.Store.Get(prevID); ok {
 			chatBody = injectHistory(chatBody, entry)
 		}
 	}
 
+	// Safety net: if any assistant message has tool_calls without reasoning_content,
+	// disable thinking to avoid DeepSeek rejecting the request.
+	chatBody = convert.EnsureThinkingSafety(chatBody)
+
+	// Normalize message ordering: ensure tool responses immediately follow
+	// their corresponding assistant tool_calls; downgrade orphan tool messages.
+	chatBody = convert.NormalizeMessages(chatBody)
+
 	if !stream {
 		h.handleNonStream(w, chatBody, model)
 	} else {
-		h.handleStream(w, r, chatBody, model)
+		h.handleStream(w, chatBody, model)
 	}
+}
+
+// appendAndStore appends assistant to requestMessages and stores the combined
+// result. On any JSON error it falls back to storing requestMessages alone.
+func (h *ResponsesHandler) appendAndStore(respID, requestMessages string, assistant map[string]any, reasoning string) {
+	var msgs []any
+	if err := json.Unmarshal([]byte(requestMessages), &msgs); err != nil {
+		log.Printf("[WARN] appendAndStore: cannot unmarshal messages: %v", err)
+		h.Store.Put(respID, requestMessages, reasoning)
+		return
+	}
+	msgs = append(msgs, assistant)
+	fullMsgsJSON, err := json.Marshal(msgs)
+	if err != nil {
+		log.Printf("[WARN] appendAndStore: cannot marshal full messages: %v", err)
+		h.Store.Put(respID, requestMessages, reasoning)
+		return
+	}
+	h.Store.Put(respID, string(fullMsgsJSON), reasoning)
 }
 
 // injectHistory merges stored chat messages + current messages and injects cached reasoning.
@@ -119,18 +149,28 @@ func (h *ResponsesHandler) handleNonStream(w http.ResponseWriter, chatBody, mode
 	respStr := string(respBody)
 	responsesBody := convert.ConvertResponse(respStr, model)
 
-	// Store request messages + reasoning for previous_response_id continuity
+	// Store request messages + assistant response for conversation continuity
 	respID := gjson.Get(responsesBody, "id").String()
-	messages := gjson.Get(chatBody, "messages").Raw
 	reasoning := convert.ExtractReasoning(respStr)
-	h.Store.Put(respID, messages, reasoning)
+	messages := gjson.Get(chatBody, "messages").Raw
+	if assistantMsg := gjson.Get(respStr, "choices.0.message"); assistantMsg.Exists() {
+		var assistant map[string]any
+		if err := json.Unmarshal([]byte(assistantMsg.Raw), &assistant); err != nil {
+			log.Printf("[WARN] nonstream store: cannot unmarshal assistant: %v", err)
+			h.Store.Put(respID, messages, reasoning)
+		} else {
+			h.appendAndStore(respID, messages, assistant, reasoning)
+		}
+	} else {
+		h.Store.Put(respID, messages, reasoning)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(responsesBody))
 }
 
-func (h *ResponsesHandler) handleStream(w http.ResponseWriter, r *http.Request, chatBody, model string) {
+func (h *ResponsesHandler) handleStream(w http.ResponseWriter, chatBody, model string) {
 	resp, err := h.Upstream.Send([]byte(chatBody))
 	if err != nil {
 		log.Printf("[ERROR] upstream stream: %v", err)
@@ -174,6 +214,14 @@ func (h *ResponsesHandler) handleStream(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
+	// Check for stream read errors before emitting completion.
+	// If the upstream stream was interrupted, skip Done() and storage — the
+	// accumulated state is incomplete and would corrupt future multi-turn history.
+	if err := scanner.Err(); err != nil {
+		log.Printf("[ERROR] stream read error: %v", err)
+		return
+	}
+
 	// Emit completion events
 	finalEvents := state.Done()
 	for _, e := range finalEvents {
@@ -181,10 +229,30 @@ func (h *ResponsesHandler) handleStream(w http.ResponseWriter, r *http.Request, 
 		flusher.Flush()
 	}
 
-	// Store request messages + reasoning for multi-turn continuity
+	// Store request messages + reasoning + assistant response for multi-turn continuity
 	reasoning := state.GetReasoningText()
 	messages := gjson.Get(chatBody, "messages").Raw
-	h.Store.Put(respID, messages, reasoning)
+	if assistant := state.GetAssistantMessage(); assistant != nil {
+		h.appendAndStore(respID, messages, assistant, reasoning)
+	} else {
+		h.Store.Put(respID, messages, reasoning)
+	}
+}
+
+// inputHasFuncCalls checks whether the Responses API body's input array
+// contains function_call items, which indicates the full conversation history
+// (including tool round-trips) is already present in the input.
+func inputHasFuncCalls(bodyStr string) bool {
+	input := gjson.Get(bodyStr, "input")
+	if !input.IsArray() {
+		return false
+	}
+	for _, item := range input.Array() {
+		if item.Get("type").String() == "function_call" {
+			return true
+		}
+	}
+	return false
 }
 
 func writeError(w http.ResponseWriter, code int, msg string) {

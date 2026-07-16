@@ -1,8 +1,6 @@
 package config
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"os"
 	"strconv"
 )
@@ -10,7 +8,6 @@ import (
 // Config holds all configuration from environment variables.
 type Config struct {
 	ProxyPort       string
-	ProxyAuthKey    string
 	DeepSeekAPIKey  string
 	DeepSeekBaseURL string
 	DeepSeekModel   string
@@ -22,13 +19,8 @@ type Config struct {
 
 // LoadEnv loads configuration from environment variables with defaults.
 func LoadEnv() *Config {
-	authKey := os.Getenv("PROXY_AUTH_KEY")
-	if authKey == "" {
-		authKey = generateAuthKey()
-	}
 	return &Config{
-		ProxyPort:       getEnv("PROXY_PORT", "3688"),
-		ProxyAuthKey:    authKey,
+		ProxyPort: getEnv("PROXY_PORT", "3688"),
 		DeepSeekAPIKey:  os.Getenv("DEEPSEEK_API_KEY"),
 		DeepSeekBaseURL: getEnv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
 		DeepSeekModel:   getEnv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
@@ -53,12 +45,4 @@ func getEnvInt(key string, defaultVal int) int {
 		}
 	}
 	return defaultVal
-}
-
-func generateAuthKey() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "auto-generated-fallback-change-me"
-	}
-	return hex.EncodeToString(b)
 }
