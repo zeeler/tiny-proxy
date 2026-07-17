@@ -18,9 +18,8 @@ import (
 
 // ResponsesHandler handles POST /v1/responses — the main proxy endpoint.
 type ResponsesHandler struct {
-	Upstream     *upstream.Client
-	Store        *session.Store
-	DefaultModel string
+	Router *upstream.Router
+	Store  *session.Store
 }
 
 // ServeHTTP implements the main protocol conversion logic.
@@ -33,9 +32,7 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	bodyStr := string(body)
 
 	model := gjson.Get(bodyStr, "model").String()
-	if model == "" {
-		model = h.DefaultModel
-	}
+	client := h.Router.ClientFor(model)
 
 	stream := gjson.Get(bodyStr, "stream").Bool()
 
@@ -62,9 +59,9 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	chatBody = convert.NormalizeMessages(chatBody)
 
 	if !stream {
-		h.handleNonStream(w, chatBody, model)
+		h.handleNonStream(w, chatBody, model, client)
 	} else {
-		h.handleStream(w, chatBody, model)
+		h.handleStream(w, chatBody, model, client)
 	}
 }
 
@@ -130,8 +127,8 @@ func injectHistory(chatBody string, entry *session.Entry) string {
 	return result
 }
 
-func (h *ResponsesHandler) handleNonStream(w http.ResponseWriter, chatBody, model string) {
-	resp, err := h.Upstream.Send([]byte(chatBody))
+func (h *ResponsesHandler) handleNonStream(w http.ResponseWriter, chatBody, model string, client *upstream.Client) {
+	resp, err := client.Send([]byte(chatBody))
 	if err != nil {
 		log.Printf("[ERROR] upstream: %v", err)
 		writeError(w, http.StatusBadGateway, err.Error())
@@ -170,8 +167,8 @@ func (h *ResponsesHandler) handleNonStream(w http.ResponseWriter, chatBody, mode
 	w.Write([]byte(responsesBody))
 }
 
-func (h *ResponsesHandler) handleStream(w http.ResponseWriter, chatBody, model string) {
-	resp, err := h.Upstream.Send([]byte(chatBody))
+func (h *ResponsesHandler) handleStream(w http.ResponseWriter, chatBody, model string, client *upstream.Client) {
+	resp, err := client.Send([]byte(chatBody))
 	if err != nil {
 		log.Printf("[ERROR] upstream stream: %v", err)
 		writeError(w, http.StatusBadGateway, err.Error())

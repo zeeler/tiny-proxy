@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/zeeler/codex-miniproxy/session"
+	"github.com/zeeler/codex-miniproxy/upstream"
 )
 
 func TestHandleHealth(t *testing.T) {
@@ -26,18 +27,28 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleModels(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/v1/models", nil)
-	handleModels(w, r, "deepseek-v4")
+	models := []upstream.ModelInfo{
+		{ID: "deepseek-v4-flash", Provider: "deepseek"},
+		{ID: "glm-4-flash", Provider: "glm"},
+	}
+	handleModels(w, r, models)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d", w.Code)
 	}
 	var resp ModelsResponse
 	json.NewDecoder(w.Body).Decode(&resp)
-	if len(resp.Data) == 0 {
-		t.Fatal("no models returned")
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected 2 models, got %d", len(resp.Data))
 	}
-	if resp.Data[0].ID != "deepseek-v4" {
-		t.Errorf("model id = %q", resp.Data[0].ID)
+	if resp.Data[0].ID != "deepseek-v4-flash" {
+		t.Errorf("model[0].id = %q", resp.Data[0].ID)
+	}
+	if resp.Data[0].OwnedBy != "deepseek" {
+		t.Errorf("model[0].owned_by = %q", resp.Data[0].OwnedBy)
+	}
+	if resp.Data[1].ID != "glm-4-flash" {
+		t.Errorf("model[1].id = %q", resp.Data[1].ID)
 	}
 }
 

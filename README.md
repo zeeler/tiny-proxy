@@ -1,17 +1,22 @@
 # tiny-proxy
 
-本地 HTTP 代理，让 Codex CLI / ChatGPT App 通过 DeepSeek 大模型运行。
+本地 HTTP 代理，让 Codex CLI / ChatGPT App 通过国产大模型运行。支持 **7 种模型**，在 ChatGPT App 中自由切换。
 
-**核心功能：** OpenAI Responses API ↔ DeepSeek Chat Completions 协议双向转换，SSE 流式桥接，thinking 模式完整支持，多轮对话 + 工具调用兼容。
+**核心功能：** OpenAI Responses API ↔ Chat Completions 协议双向转换，SSE 流式桥接，thinking 模式完整支持，多轮对话 + 工具调用兼容，多模型路由。
 
 ## 架构
 
 ```
-Codex / ChatGPT App ──(Responses API)──▶ tiny-proxy ──(Chat Completions)──▶ DeepSeek API
-       127.0.0.1:3688                                  api.deepseek.com/v1
+Codex / ChatGPT App ──(Responses API)──▶ tiny-proxy ──┬── DeepSeek
+       127.0.0.1:3688                                ├── GLM (智谱)
+                                                     ├── Kimi (月之暗面)
+                                                     ├── Qwen (通义千问)
+                                                     ├── MiniMax
+                                                     ├── Doubao (豆包)
+                                                     └── Seed Code
 ```
 
-代理零认证 — 上游 API key 仅在服务端配置，Codex 调用无需验证。
+代理零认证 — 上游 API key 仅在服务端配置，ChatGPT App 调用无需验证。
 
 ## 快速开始
 
@@ -25,8 +30,16 @@ make build
 
 ### 2. 配置
 
+至少配置一个模型的 API Key：
+
 ```bash
+# DeepSeek（默认）
 export DEEPSEEK_API_KEY=sk-your-deepseek-key
+
+# 或者配置多个模型，在 ChatGPT App 中随时切换
+export GLM_API_KEY=xxx        # 智谱 GLM
+export KIMI_API_KEY=xxx       # 月之暗面 Kimi
+export QWEN_API_KEY=xxx       # 通义千问 Qwen
 ```
 
 ### 3. 启动
@@ -43,12 +56,13 @@ export DEEPSEEK_API_KEY=sk-your-deepseek-key
 
 ### 4. 使用
 
-启动 Codex / ChatGPT App，正常对话即可。
+启动 ChatGPT App，在模型选择中即可看到已配置的所有模型，自由切换。
 
 ## 命令参考
 
 ```bash
 tiny-proxy                   # 启动代理（默认端口 3688）
+tiny-proxy --help            # 查看完整帮助（含支持的所有环境变量）
 tiny-proxy --setup           # 仅修改 Codex 配置，不启动代理
 tiny-proxy --setup --dry-run # 预览将要做的配置修改
 tiny-proxy --restore         # 恢复 Codex 原始配置
@@ -57,13 +71,25 @@ tiny-proxy --port 4000       # 使用自定义端口
 
 ## 环境变量
 
+### 模型配置（每个模型独立一套）
+
+| 模型 | API Key 变量 | Model 变量 | Base URL 变量 |
+|------|-------------|-----------|--------------|
+| **DeepSeek** | `DEEPSEEK_API_KEY` | `DEEPSEEK_MODEL` (默认 `deepseek-v4-flash`) | `DEEPSEEK_BASE_URL` |
+| **GLM**（智谱） | `GLM_API_KEY` | `GLM_MODEL` (默认 `glm-4-flash`) | `GLM_BASE_URL` |
+| **Kimi**（月之暗面） | `KIMI_API_KEY` | `KIMI_MODEL` (默认 `moonshot-v1-8k`) | `KIMI_BASE_URL` |
+| **Qwen**（通义千问） | `QWEN_API_KEY` | `QWEN_MODEL` (默认 `qwen-max`) | `QWEN_BASE_URL` |
+| **MiniMax** | `MINIMAX_API_KEY` | `MINIMAX_MODEL` (默认 `abab6.5s-chat`) | `MINIMAX_BASE_URL` |
+| **Doubao**（豆包） | `DOUBAO_API_KEY` | `DOUBAO_MODEL` (默认 `doubao-pro-32k`) | `DOUBAO_BASE_URL` |
+| **Seed Code** | `SEEDCODE_API_KEY` | `SEEDCODE_MODEL` (默认 `seedcode-chat`) | `SEEDCODE_BASE_URL` |
+
+> 只配置了 `*_API_KEY` 的模型才会激活。运行 `tiny-proxy --help` 查看完整列表。
+
+### 代理设置
+
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DEEPSEEK_API_KEY` | 是 | — | DeepSeek API 密钥 |
 | `PROXY_PORT` | 否 | `3688` | 代理监听端口 |
-| `DEEPSEEK_BASE_URL` | 否 | `https://api.deepseek.com/v1` | DeepSeek API 端点 |
-| `DEEPSEEK_MODEL` | 否 | `deepseek-v4-flash` | 默认模型 |
-| `REASONING_EFFORT` | 否 | `high` | 推理力度 |
 | `STORE_TTL` | 否 | `3600` | 会话存储 TTL（秒） |
 | `STORE_MAX` | 否 | `500` | 最大会话数 |
 | `LOG_LEVEL` | 否 | `info` | 日志级别 |
@@ -73,9 +99,22 @@ tiny-proxy --port 4000       # 使用自定义端口
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
 | `GET` | `/health` | — | 健康检查 |
-| `GET` | `/v1/models` | — | 模型列表 |
-| `POST` | `/v1/responses` | — | 主端点，协议转换 |
+| `GET` | `/v1/models` | — | 返回所有已激活模型列表 |
+| `POST` | `/v1/responses` | — | 主端点，请求中 `model` 字段决定路由到哪个上游 |
 | `POST` | `/v1/chat/completions` | — | 直接透传（调试用） |
+
+## 模型路由
+
+请求中的 `model` 字段决定路由：
+
+```
+POST /v1/responses  {"model": "deepseek-v4-flash", ...}  →  DeepSeek
+POST /v1/responses  {"model": "glm-4-flash", ...}        →  GLM (智谱)
+POST /v1/responses  {"model": "qwen-max", ...}           →  Qwen (通义)
+...
+```
+
+ChatGPT App 在 `/v1/models` 中看到所有已配置的模型，用户在 App 中选择即可自动切换。
 
 ## 协议转换
 
@@ -214,7 +253,8 @@ tiny-proxy/
 ├── session/
 │   └── store.go              # LRU + TTL 会话存储
 ├── upstream/
-│   └── deepseek.go           # DeepSeek Chat Completions HTTP 客户端
+│   ├── client.go             # Chat Completions HTTP 客户端（通用）
+│   └── router.go             # model → provider 路由
 ├── proxy/
 │   ├── server.go             # HTTP 路由注册
 │   ├── handler_responses.go  # 核心处理链（转换 → 注入 → 安全网 → 归一化 → 发送）
