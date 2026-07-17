@@ -36,7 +36,7 @@ export DEEPSEEK_API_KEY=sk-your-deepseek-key
 # 或者配置多个模型，在 ChatGPT App 中随时切换
 export GLM_API_KEY=xxx        # 智谱 GLM
 export KIMI_API_KEY=xxx       # 月之暗面 Kimi
-export QWEN_API_KEY=xxx       # 通义千问 Qwen
+export MINIMAX_API_KEY=xxx    # MiniMax
 ```
 
 ### 3. 启动
@@ -104,7 +104,7 @@ tiny-proxy --port 4000       # 使用自定义端口
 ```
 POST /v1/responses  {"model": "deepseek-v4-flash", ...}  →  DeepSeek
 POST /v1/responses  {"model": "glm-4-flash", ...}        →  GLM (智谱)
-POST /v1/responses  {"model": "qwen-max", ...}           →  Qwen (通义)
+POST /v1/responses  {"model": "abab6.5s-chat", ...}      →  MiniMax
 ...
 ```
 
