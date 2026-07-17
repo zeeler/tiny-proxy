@@ -1,4 +1,4 @@
-module github.com/zeeler/codex-miniproxy
+module github.com/zeeler/tiny-proxy
 
 go 1.26.3
 

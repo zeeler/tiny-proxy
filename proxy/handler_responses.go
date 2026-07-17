@@ -11,9 +11,9 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
-	"github.com/zeeler/codex-miniproxy/convert"
-	"github.com/zeeler/codex-miniproxy/session"
-	"github.com/zeeler/codex-miniproxy/upstream"
+	"github.com/zeeler/tiny-proxy/convert"
+	"github.com/zeeler/tiny-proxy/session"
+	"github.com/zeeler/tiny-proxy/upstream"
 )
 
 // ResponsesHandler handles POST /v1/responses — the main proxy endpoint.

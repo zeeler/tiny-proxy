@@ -23,7 +23,7 @@ Codex / ChatGPT App ──(Responses API)──▶ tiny-proxy ──┬── De
 ### 1. 安装
 
 ```bash
-git clone https://github.com/terry/tiny-proxy.git
+git clone https://github.com/zeeler/tiny-proxy.git
 cd tiny-proxy
 make build
 ```

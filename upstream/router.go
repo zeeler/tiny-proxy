@@ -3,7 +3,7 @@ package upstream
 import (
 	"fmt"
 
-	"github.com/zeeler/codex-miniproxy/config"
+	"github.com/zeeler/tiny-proxy/config"
 )
 
 // Router maps model names to upstream clients.

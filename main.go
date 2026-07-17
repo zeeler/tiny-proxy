@@ -6,8 +6,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/zeeler/codex-miniproxy/config"
-	"github.com/zeeler/codex-miniproxy/proxy"
+	"github.com/zeeler/tiny-proxy/config"
+	"github.com/zeeler/tiny-proxy/proxy"
 )
 
 var (

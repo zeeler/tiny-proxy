@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/zeeler/codex-miniproxy/upstream"
+	"github.com/zeeler/tiny-proxy/upstream"
 )
 
 type ModelsResponse struct {

@@ -8,9 +8,9 @@ import (
 
 	"github.com/tidwall/gjson"
 
-	"github.com/zeeler/codex-miniproxy/config"
-	"github.com/zeeler/codex-miniproxy/session"
-	"github.com/zeeler/codex-miniproxy/upstream"
+	"github.com/zeeler/tiny-proxy/config"
+	"github.com/zeeler/tiny-proxy/session"
+	"github.com/zeeler/tiny-proxy/upstream"
 )
 
 // extractModel reads the model field from a JSON request body.

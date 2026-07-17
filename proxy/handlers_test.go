@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zeeler/codex-miniproxy/session"
-	"github.com/zeeler/codex-miniproxy/upstream"
+	"github.com/zeeler/tiny-proxy/session"
+	"github.com/zeeler/tiny-proxy/upstream"
 )
 
 func TestHandleHealth(t *testing.T) {
