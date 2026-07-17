@@ -65,28 +65,10 @@ func allProviders() []*ProviderConfig {
 			Model:   getEnv("KIMI_MODEL", "moonshot-v1-8k"),
 		},
 		{
-			Name:    "qwen",
-			APIKey:  os.Getenv("QWEN_API_KEY"),
-			BaseURL: getEnv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
-			Model:   getEnv("QWEN_MODEL", "qwen-max"),
-		},
-		{
 			Name:    "minimax",
 			APIKey:  os.Getenv("MINIMAX_API_KEY"),
 			BaseURL: getEnv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1"),
 			Model:   getEnv("MINIMAX_MODEL", "abab6.5s-chat"),
-		},
-		{
-			Name:    "doubao",
-			APIKey:  os.Getenv("DOUBAO_API_KEY"),
-			BaseURL: getEnv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
-			Model:   getEnv("DOUBAO_MODEL", "doubao-pro-32k"),
-		},
-		{
-			Name:    "seedcode",
-			APIKey:  os.Getenv("SEEDCODE_API_KEY"),
-			BaseURL: getEnv("SEEDCODE_BASE_URL", "https://api.seedcode.com/v1"),
-			Model:   getEnv("SEEDCODE_MODEL", "seedcode-chat"),
 		},
 	}
 }

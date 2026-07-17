@@ -1,6 +1,6 @@
 # tiny-proxy
 
-本地 HTTP 代理，让 Codex CLI / ChatGPT App 通过国产大模型运行。支持 **7 种模型**，在 ChatGPT App 中自由切换。
+本地 HTTP 代理，让 Codex CLI / ChatGPT App 通过国产大模型运行。支持 DeepSeek、GLM、Kimi、MiniMax，在 ChatGPT App 中自由切换。
 
 **核心功能：** OpenAI Responses API ↔ Chat Completions 协议双向转换，SSE 流式桥接，thinking 模式完整支持，多轮对话 + 工具调用兼容，多模型路由。
 
@@ -10,10 +10,7 @@
 Codex / ChatGPT App ──(Responses API)──▶ tiny-proxy ──┬── DeepSeek
        127.0.0.1:3688                                ├── GLM (智谱)
                                                      ├── Kimi (月之暗面)
-                                                     ├── Qwen (通义千问)
-                                                     ├── MiniMax
-                                                     ├── Doubao (豆包)
-                                                     └── Seed Code
+                                                     └── MiniMax
 ```
 
 代理零认证 — 上游 API key 仅在服务端配置，ChatGPT App 调用无需验证。
@@ -78,10 +75,9 @@ tiny-proxy --port 4000       # 使用自定义端口
 | **DeepSeek** | `DEEPSEEK_API_KEY` | `DEEPSEEK_MODEL` (默认 `deepseek-v4-flash`) | `DEEPSEEK_BASE_URL` |
 | **GLM**（智谱） | `GLM_API_KEY` | `GLM_MODEL` (默认 `glm-4-flash`) | `GLM_BASE_URL` |
 | **Kimi**（月之暗面） | `KIMI_API_KEY` | `KIMI_MODEL` (默认 `moonshot-v1-8k`) | `KIMI_BASE_URL` |
-| **Qwen**（通义千问） | `QWEN_API_KEY` | `QWEN_MODEL` (默认 `qwen-max`) | `QWEN_BASE_URL` |
 | **MiniMax** | `MINIMAX_API_KEY` | `MINIMAX_MODEL` (默认 `abab6.5s-chat`) | `MINIMAX_BASE_URL` |
-| **Doubao**（豆包） | `DOUBAO_API_KEY` | `DOUBAO_MODEL` (默认 `doubao-pro-32k`) | `DOUBAO_BASE_URL` |
-| **Seed Code** | `SEEDCODE_API_KEY` | `SEEDCODE_MODEL` (默认 `seedcode-chat`) | `SEEDCODE_BASE_URL` |
+
+> Qwen、Doubao（豆包）、Seed Code 已原生支持 Responses API，无需通过代理。
 
 > 只配置了 `*_API_KEY` 的模型才会激活。运行 `tiny-proxy --help` 查看完整列表。
 

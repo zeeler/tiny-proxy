@@ -36,10 +36,7 @@ Environment Variables:
   DeepSeek     DEEPSEEK_API_KEY     DEEPSEEK_MODEL       DEEPSEEK_BASE_URL
   GLM (智谱)   GLM_API_KEY          GLM_MODEL            GLM_BASE_URL
   Kimi (月暗)  KIMI_API_KEY         KIMI_MODEL           KIMI_BASE_URL
-  Qwen (通义)  QWEN_API_KEY         QWEN_MODEL           QWEN_BASE_URL
   MiniMax      MINIMAX_API_KEY      MINIMAX_MODEL        MINIMAX_BASE_URL
-  Doubao (豆包) DOUBAO_API_KEY      DOUBAO_MODEL         DOUBAO_BASE_URL
-  Seed Code    SEEDCODE_API_KEY     SEEDCODE_MODEL       SEEDCODE_BASE_URL
 
   Proxy settings:
     PROXY_PORT      Listen port (default: 3688)

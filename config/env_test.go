@@ -13,10 +13,7 @@ func TestLoadEnvDefaults(t *testing.T) {
 	os.Unsetenv("DEEPSEEK_API_KEY")
 	os.Unsetenv("GLM_API_KEY")
 	os.Unsetenv("KIMI_API_KEY")
-	os.Unsetenv("QWEN_API_KEY")
 	os.Unsetenv("MINIMAX_API_KEY")
-	os.Unsetenv("DOUBAO_API_KEY")
-	os.Unsetenv("SEEDCODE_API_KEY")
 
 	cfg := LoadEnv()
 
