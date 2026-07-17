@@ -77,8 +77,6 @@ tiny-proxy --port 4000       # 使用自定义端口
 | **Kimi**（月之暗面） | `KIMI_API_KEY` | `KIMI_MODEL` (默认 `moonshot-v1-8k`) | `KIMI_BASE_URL` |
 | **MiniMax** | `MINIMAX_API_KEY` | `MINIMAX_MODEL` (默认 `abab6.5s-chat`) | `MINIMAX_BASE_URL` |
 
-> Qwen、Doubao（豆包）、Seed Code 已原生支持 Responses API，无需通过代理。
-
 > 只配置了 `*_API_KEY` 的模型才会激活。运行 `tiny-proxy --help` 查看完整列表。
 
 ### 代理设置
